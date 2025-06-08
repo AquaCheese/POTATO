@@ -474,41 +474,49 @@ function App() {
   const [devConsoleLog, setDevConsoleLog] = React.useState<string[]>([]);
   const devCodeRef = React.useRef('');
 
+  // --- DEBUG OVERLAY ---
+  const [showDebug, setShowDebug] = React.useState(false);
+  const debugInfo = (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      background: 'rgba(0,0,0,0.85)',
+      color: '#fff',
+      fontSize: 14,
+      zIndex: 9999,
+      padding: '10px 18px',
+      borderTopRightRadius: 12,
+      maxWidth: 420,
+      pointerEvents: 'auto',
+      lineHeight: 1.6
+    }}>
+      <b>DEBUG INFO</b><br/>
+      <b>weather:</b> {String(weather)}<br/>
+      <b>rainDaysLeft:</b> {String(rainDaysLeft)}<br/>
+      <b>rainForecast:</b> {JSON.stringify(rainForecast)}<br/>
+      <b>timer:</b> {String(timer)}<br/>
+      <b>showRainOverlay:</b> {weather === 'rain' ? 'YES' : 'NO'}<br/>
+      <b>Plots (watered):</b> {field.grid.flat().filter(p => p.water > 0).length}<br/>
+      <b>Plots (dug):</b> {field.grid.flat().filter(p => p.isDug).length}<br/>
+      <b>Plots (sown):</b> {field.grid.flat().filter(p => p.isSown).length}<br/>
+      <button style={{marginTop:8,padding:'2px 10px',borderRadius:6,border:'none',background:'#ffb74d',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>setShowDebug(false)}>Close Debug</button>
+    </div>
+  );
+
   // Developer console command handler
   const handleDevConsoleCommand = (cmd: string) => {
     let output = '';
     const command = cmd.trim().toLowerCase();
     if (command === 'help') {
-      output = 'Available commands: inf_money, max_items, reset_field, reset_day, set_money <amount>, set_day <num>, enable_weather: <type> <days>, close, help';
-    } else if (command === 'inf_money') {
-      setPlayer(p => ({...p, money: 999999}));
-      output = 'Unlimited money granted!';
-    } else if (command === 'max_items') {
-      setPlayer(p => ({...p, seeds: 999, fertilizer: 999, potatoes: 999}));
-      output = 'Max items granted!';
-    } else if (command === 'reset_field') {
-      setField(createInitialField());
-      output = 'Field reset!';
-    } else if (command === 'reset_day') {
-      setDay(1);
-      output = 'Day reset!';
-    } else if (command.startsWith('set_money ')) {
-      const amt = parseInt(command.split(' ')[1]);
-      if (!isNaN(amt)) {
-        setPlayer(p => ({...p, money: amt}));
-        output = `Money set to $${amt}`;
-      } else {
-        output = 'Invalid amount.';
-      }
-    } else if (command.startsWith('set_day ')) {
-      const num = parseInt(command.split(' ')[1]);
-      if (!isNaN(num)) {
-        setDay(num);
-        output = `Day set to ${num}`;
-      } else {
-        output = 'Invalid day.';
-      }
-    } else if (command.startsWith('enable_weather:')) {
+      output = 'Available commands: help, reset, close, enable_weather: rain <days>, enable_weather: none 0, enable_debug, disable_debug';
+    } else if (command === 'enable_debug') {
+      setShowDebug(true);
+      output = 'Debug info enabled.';
+    } else if (command === 'disable_debug') {
+      setShowDebug(false);
+      output = 'Debug info disabled.';
+    } else if (command.startsWith('enable_weather')) {
       // Syntax: enable_weather: <type> <days>
       const parts = command.replace('enable_weather:', '').trim().split(/\s+/);
       const type = parts[0];
@@ -774,36 +782,6 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showToolMenu]);
 
-  // --- DEBUG OVERLAY ---
-  const [showDebug, setShowDebug] = React.useState(false);
-  const debugInfo = (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: 0,
-      background: 'rgba(0,0,0,0.85)',
-      color: '#fff',
-      fontSize: 14,
-      zIndex: 9999,
-      padding: '10px 18px',
-      borderTopRightRadius: 12,
-      maxWidth: 420,
-      pointerEvents: 'auto',
-      lineHeight: 1.6
-    }}>
-      <b>DEBUG INFO</b><br/>
-      <b>weather:</b> {String(weather)}<br/>
-      <b>rainDaysLeft:</b> {String(rainDaysLeft)}<br/>
-      <b>rainForecast:</b> {JSON.stringify(rainForecast)}<br/>
-      <b>timer:</b> {String(timer)}<br/>
-      <b>showRainOverlay:</b> {weather === 'rain' ? 'YES' : 'NO'}<br/>
-      <b>Plots (watered):</b> {field.grid.flat().filter(p => p.water > 0).length}<br/>
-      <b>Plots (dug):</b> {field.grid.flat().filter(p => p.isDug).length}<br/>
-      <b>Plots (sown):</b> {field.grid.flat().filter(p => p.isSown).length}<br/>
-      <button style={{marginTop:8,padding:'2px 10px',borderRadius:6,border:'none',background:'#ffb74d',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>setShowDebug(false)}>Close Debug</button>
-    </div>
-  );
-
   return (
     <div className={`app-container${darkMode ? ' dark-mode' : ''}`}>
       {/* Rain overlay (does not block clicks) */}
@@ -911,7 +889,6 @@ function App() {
         <button onClick={saveGame} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#ffd54f', color: '#222', cursor: 'pointer'}}>Save</button>
         <button onClick={() => setDarkMode(d => !d)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: darkMode ? '#23293a' : '#fffbe7', color: darkMode ? '#ffe082' : '#23293a', cursor: 'pointer', fontWeight: 700}} title="Toggle light/dark mode">{darkMode ? '☀️ Light' : '🌙 Dark'}</button>
         <button onClick={() => setShowHelp(true)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#90caf9', color: '#222', cursor: 'pointer', fontWeight: 700}}>Help</button>
-        <button onClick={() => setShowDebug(d => !d)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#e57373', color: '#fff', cursor: 'pointer', fontWeight: 700}}>Debug</button>
       </div>
       {/* Event log now appears between tools and field */}
       <div className={`event-log${eventLog ? ' visible' : ''}${eventLog ? ' ' + eventLog.type : ''}`}>{eventLog?.msg}</div>
