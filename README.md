@@ -1,74 +1,51 @@
-# Potato Farming Game Desktop App
+# Potato Farming Game
 
-This is a desktop potato farming game built with React, TypeScript, and Vite. The game will include:
-- Basic farming features: watering, digging, sowing seeds, fertilizing
-- A shop system to buy/sell items
-- A money system for upgrades and purchases
-- Modern, user-friendly UI
-- Designed to be packaged as a desktop app (Electron integration coming soon)
+Welcome to the Potato Farming Game! This is a fun and engaging simulation game where you can grow and manage your own potato farm. 
+
+## Features
+
+- **Watering**: Keep your potato plants hydrated to ensure healthy growth.
+- **Fertilizing**: Use fertilizers to boost the growth rate and yield of your potatoes.
+- **Digging**: Harvest your potatoes by digging them up when they are ready.
 
 ## Getting Started
 
-1. Install dependencies:
-   ```powershell
+To get started with the Potato Farming Game, follow these steps:
+
+1. **Clone the repository**:
+   ```
+   git clone https://github.com/yourusername/potato-farming-game.git
+   ```
+
+2. **Navigate to the project directory**:
+   ```
+   cd potato-farming-game
+   ```
+
+3. **Install dependencies**:
+   ```
    npm install
    ```
-2. Start the development server:
-   ```powershell
-   npm run dev
+
+4. **Run the game**:
    ```
-3. Open the app in your browser at the URL shown in the terminal (usually http://localhost:5173).
+   npm start
+   ```
 
-## Next Steps
-- Game logic and UI will be implemented in the `src` directory.
-- Electron integration will be added to make this a downloadable desktop app.
+## Gameplay
 
----
+In the Potato Farming Game, you will take on the role of a farmer. Your goal is to cultivate potatoes by performing various actions such as watering, fertilizing, and digging. 
 
-*This project was bootstrapped with Vite + React + TypeScript.*
+- **Watering**: Use the watering action to keep your potato field moist. This is essential for the growth of your potatoes.
+- **Fertilizing**: Apply fertilizer to enhance the growth of your crops. This will help you achieve a better yield.
+- **Digging**: Once your potatoes are fully grown, you can dig them up and collect your harvest.
 
-## Expanding the ESLint configuration
+## Contributing
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+If you would like to contribute to the Potato Farming Game, feel free to submit a pull request or open an issue for discussion.
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## License
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This project is licensed under the MIT License. See the LICENSE file for more details.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+Enjoy farming!

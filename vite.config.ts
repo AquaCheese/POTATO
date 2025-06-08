@@ -6,3 +6,4 @@ export default defineConfig({
   base: '/POTATO/',
   plugins: [react()],
 });
+// lolz
