@@ -624,35 +624,6 @@ body.dark-mode, .App.dark-mode, html.dark-mode {
   border-color: #4a90e2 !important;
   box-shadow: 0 6px 32px #4a90e244;
 }
-.dark-mode .plot {
-  background: linear-gradient(180deg, #23293a 60%, #181c24 100%) !important;
-  color: #ffe082 !important;
-  border-color: #4a90e2 !important;
-  box-shadow: 0 2px 8px #4a90e244 inset;
-}
-.dark-mode .plot.dug {
-  background: linear-gradient(180deg, #23293a 60%, #4a90e2 100%) !important;
-}
-.dark-mode .plot.sown {
-  background: linear-gradient(180deg, #388e3c 60%, #23293a 100%) !important;
-}
-.dark-mode .plot.selected {
-  border: 3px solid #ffe082 !important;
-  box-shadow: 0 0 16px #ffe082cc !important;
-}
-.dark-mode .plot.stage-sprout {
-  background: linear-gradient(180deg, #4a90e2 60%, #23293a 100%) !important;
-}
-.dark-mode .plot.stage-growing {
-  background: linear-gradient(180deg, #ffd54f 60%, #23293a 100%) !important;
-}
-.dark-mode .plot.stage-mature {
-  background: linear-gradient(180deg, #ffe082 60%, #ffd54f 100%) !important;
-}
-.dark-mode .plot.stage-dead {
-  background: repeating-linear-gradient(135deg, #b71c1c 0 10px, #23293a 10px 20px) !important;
-  color: #fff !important;
-}
 .dark-mode .actions button {
   background: linear-gradient(90deg, #23293a 60%, #4a90e2 100%) !important;
   color: #ffe082 !important;

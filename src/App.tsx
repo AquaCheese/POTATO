@@ -80,7 +80,7 @@ function App() {
   const [selected, setSelected] = useState<{x: number, y: number} | null>(null);
   const [day, setDay] = React.useState(1);
   const [timer, setTimer] = React.useState(20); // 20 seconds per day (was 10)
-  const [selectedTool, setSelectedTool] = React.useState<null | 'dig' | 'sow' | 'water' | 'fertilize' | 'harvest' | 'trowel'>(null);
+  const [selectedTool, setSelectedTool] = React.useState<'dig' | 'sow' | 'water' | 'fertilize' | 'harvest' | 'trowel' | null>(null);
   const [showInventory, setShowInventory] = useState(false);
   const [showShop, setShowShop] = useState(false);
   const [fieldSize, setFieldSize] = useState(GRID_SIZE);
@@ -212,6 +212,16 @@ function App() {
       setWeather('rain');
       setRainDaysLeft(rainForecast.duration);
       setStopChance(Math.floor(Math.random() * 41) + 30);
+      // Instantly water all dry plots at the start of rain
+      setField(prev => {
+        const grid = prev.grid.map(row => row.map(plot => {
+          if (plot.isDug && plot.water === 0 && plot.stage !== 'dead') {
+            return { ...plot, water: 1, daysSinceWater: 0 };
+          }
+          return plot;
+        }));
+        return { grid };
+      });
     } else {
       setWeather('none');
       setRainDaysLeft(0);
@@ -399,6 +409,16 @@ function App() {
     }
   };
 
+  // --- Next Day button handler ---
+  const handleNextDay = () => {
+    if (player.money < 5) {
+      showEvent('Not enough money for next day!', 'bad');
+      return;
+    }
+    setPlayer(p => ({ ...p, money: p.money - 5 }));
+    setTimer(0); // Triggers the timer effect, which advances the day
+  };
+
   React.useEffect(() => {
     if (timer === 0) {
       nextDay();
@@ -500,7 +520,12 @@ function App() {
       <b>Plots (watered):</b> {field.grid.flat().filter(p => p.water > 0).length}<br/>
       <b>Plots (dug):</b> {field.grid.flat().filter(p => p.isDug).length}<br/>
       <b>Plots (sown):</b> {field.grid.flat().filter(p => p.isSown).length}<br/>
-      <button style={{marginTop:8,padding:'2px 10px',borderRadius:6,border:'none',background:'#ffb74d',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>setShowDebug(false)}>Close Debug</button>
+      <div style={{marginTop:10,display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button style={{padding:'2px 10px',borderRadius:6,border:'none',background:'#4fc3f7',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>{setRainForecast({chance:100,duration:3});setRainDaysLeft(3);setWeather('rain');}}>Enable Rain (3d)</button>
+        <button style={{padding:'2px 10px',borderRadius:6,border:'none',background:'#ffd54f',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>{setRainForecast({chance:0,duration:0});setRainDaysLeft(0);setWeather('none');}}>Clear Weather</button>
+        <button style={{padding:'2px 10px',borderRadius:6,border:'none',background:'#8bc34a',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>setPlayer(prev=>({...prev,money:Infinity}))}>Inf Money</button>
+        <button style={{padding:'2px 10px',borderRadius:6,border:'none',background:'#bdbdbd',color:'#222',fontWeight:700,cursor:'pointer'}} onClick={()=>setShowDebug(false)}>Close Debug</button>
+      </div>
     </div>
   );
 
@@ -537,6 +562,18 @@ function App() {
     } else if (command === 'close') {
       setShowDevConsole(false);
       output = 'Console closed.';
+    } else if (command === 'inf_money') {
+      setPlayer(prev => ({ ...prev, money: Infinity }));
+      output = 'Money set to infinite.';
+    } else if (command.startsWith('set_money')) {
+      const parts = command.split(' ');
+      const amount = parseInt(parts[1], 10);
+      if (!isNaN(amount) && amount >= 0) {
+        setPlayer(prev => ({ ...prev, money: amount }));
+        output = `Money set to $${amount}.`;
+      } else {
+        output = 'Usage: set_money <num> (num must be a non-negative integer).';
+      }
     } else {
       output = 'Unknown command. Type help for a list.';
     }
@@ -584,6 +621,18 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [nextDay, saveGame, showDevConsole]);
 
+  // Change the cursor to the shovel image when the 'dig' tool is selected, and reset it otherwise.
+  React.useEffect(() => {
+    if (selectedTool === 'dig') {
+      document.body.style.cursor = 'url(/POTATO/Shovel.png), pointer';
+    } else {
+      document.body.style.cursor = '';
+    }
+    return () => {
+      document.body.style.cursor = '';
+    };
+  }, [selectedTool]);
+
   // --- Mobile: Hidden dev console tap sequence ---
   const tapCountRef = React.useRef(0);
   const tapTimerRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -617,64 +666,136 @@ function App() {
     document.documentElement.classList.toggle('dark-mode', darkMode);
   }, [darkMode]);
 
-  // --- Rain overlay (grid-based, always fits desktop) ---
+  // --- Rain overlay with always-visible clouds ---
   const RainOverlay = () => {
-    // Always use desktop dimensions
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const tileSize = 96;
-    const cols = Math.ceil(width / tileSize) + 2; // +2 for diagonal entry
-    const rows = Math.ceil(height / tileSize) + 10; // +10 for extra bottom coverage
-    // Animate grid
+    const tileSize = 90;
+    // --- Rain tiles: reduced for performance ---
+    const cols = Math.ceil(width / tileSize) + 1;
+    const rows = Math.ceil(height / tileSize) + 2;
     const [offset, setOffset] = React.useState(0);
     React.useEffect(() => {
       let running = true;
       function animate() {
-        setOffset(o => (o + 3) % (tileSize * 2)); // speed and wrap
+        setOffset(o => (o + 6) % (tileSize * 2));
         if (running) requestAnimationFrame(animate);
       }
       animate();
       return () => { running = false; };
-    }, []);
+    }, [width]);
+    const rainTiles = [];
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = (col - 1) * tileSize - offset + tileSize * 1.5;
+        const y = (row - 1) * tileSize + offset - tileSize * 1.5;
+        if (x > width + tileSize || y > height + 4 * tileSize || x < -2 * tileSize || y < -2 * tileSize) continue;
+        rainTiles.push(
+          <img
+            key={row + '-' + col}
+            src="/POTATO/potato rain.png"
+            alt="rain"
+            style={{
+              position: 'absolute',
+              left: x,
+              top: y,
+              width: tileSize,
+              height: tileSize,
+              opacity: 0.32,
+              filter: 'drop-shadow(0 2px 8px #4fc3f7cc)',
+              userSelect: 'none',
+              pointerEvents: 'none',
+              mixBlendMode: darkMode ? 'screen' : 'multiply',
+            }}
+            draggable={false}
+          />
+        );
+      }
+    }
+    // --- Clouds: fixed pool, always visible, smooth animation ---
+    const cloudImgs = ['/Cloud1.png', '/Cloud2.png', '/Cloud3.png'];
+    const cloudPool = React.useRef(
+      Array.from({ length: 4 }, (_, i) => ({
+        id: i,
+        img: cloudImgs[i % cloudImgs.length],
+        x: Math.random() < 0.5 ? -320 : width + 180,
+        y: 10 + Math.random() * Math.max(40, height * 0.12), // always near the top
+        speed: (0.14 + Math.random() * 0.09) * (Math.random() < 0.5 ? 1 : -1),
+        size: Math.max(260, Math.min(width, height) * 0.22 + Math.random() * 80),
+      }))
+    );
+    const [, setCloudTick] = React.useState(0); // dummy state to force re-render
+    React.useEffect(() => {
+      let running = true;
+      function animateClouds() {
+        for (const cloud of cloudPool.current) {
+          cloud.x += cloud.speed;
+          // If off screen, respawn at opposite edge and randomize y/size
+          if (cloud.speed > 0 && cloud.x > width + 180) {
+            cloud.x = -cloud.size - 120;
+            cloud.y = 10 + Math.random() * Math.max(40, height * 0.12);
+            cloud.speed = 0.14 + Math.random() * 0.09;
+            cloud.size = Math.max(260, Math.min(width, height) * 0.22 + Math.random() * 80);
+          } else if (cloud.speed < 0 && cloud.x < -cloud.size - 180) {
+            cloud.x = width + 120;
+            cloud.y = 10 + Math.random() * Math.max(40, height * 0.12);
+            cloud.speed = -(0.14 + Math.random() * 0.09);
+            cloud.size = Math.max(260, Math.min(width, height) * 0.22 + Math.random() * 80);
+          }
+        }
+        setCloudTick(t => t + 1); // always re-render for smooth movement
+        if (running) requestAnimationFrame(animateClouds);
+      }
+      animateClouds();
+      return () => { running = false; };
+    }, [width, height]);
+    const clouds = cloudPool.current.map(cloud => (
+      <img
+        key={cloud.id}
+        src={cloud.img}
+        alt="Cloud"
+        style={{
+          position: 'fixed',
+          top: cloud.y,
+          left: cloud.x,
+          width: cloud.size,
+          height: cloud.size * 0.62,
+          opacity: 0.88,
+          filter: 'blur(0.5px) drop-shadow(0 8px 32px #2228)',
+          pointerEvents: 'none',
+          zIndex: 2000,
+          transition: 'opacity 0.3s',
+        }}
+        draggable={false}
+      />
+    ));
+    // --- Overlay ---
     return (
-      <div style={{
-        pointerEvents: 'none',
-        position: 'fixed',
-        top: 0, left: 0, width: '100vw', height: '100vh',
-        zIndex: 999,
-        overflow: 'hidden',
-      }} aria-hidden="true">
-        {Array.from({length: rows}).map((_, row) =>
-          Array.from({length: cols}).map((_, col) => {
-            // Diagonal movement: offset both x and y
-            // Shift grid so rain starts off-screen in the top-right and ends off-screen in the bottom-left
-            const x = (col - 2) * tileSize - offset + tileSize * 1.5;
-            const y = (row - 2) * tileSize + offset - tileSize * 1.5;
-            // Only render if in viewport (with a buffer for smooth entry/exit)
-            if (x > width + tileSize || y > height + 16 * tileSize || x < -4 * tileSize || y < -2 * tileSize) return null;
-            return (
-              <img
-                key={row + '-' + col}
-                src="/POTATO/potato rain.png"
-                alt="rain"
-                style={{
-                  position: 'absolute',
-                  left: x,
-                  top: y,
-                  width: tileSize,
-                  height: tileSize,
-                  opacity: 0.38,
-                  filter: 'drop-shadow(0 2px 8px #4fc3f7cc)',
-                  userSelect: 'none',
-                  pointerEvents: 'none',
-                  mixBlendMode: darkMode ? 'screen' : 'multiply',
-                }}
-                draggable={false}
-              />
-            );
-          })
-        )}
-      </div>
+      <>
+        <div style={{
+          pointerEvents: 'none',
+          position: 'fixed',
+          top: 0, left: 0, width: '100vw', height: '100vh',
+          zIndex: 1999,
+          overflow: 'hidden',
+        }} aria-hidden="true">
+          {/* Blurry gray overlay for storm effect */}
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, width: '100vw', height: '100vh',
+            background: darkMode ? 'rgba(40,40,60,0.22)' : 'rgba(120,120,140,0.13)',
+            backdropFilter: 'blur(2.5px)',
+            WebkitBackdropFilter: 'blur(2.5px)',
+            zIndex: 1999,
+            pointerEvents: 'none',
+            transition: 'background 0.4s',
+          }} />
+          {/* Animated clouds */}
+          {clouds}
+          {/* Rain tiles */}
+          {rainTiles}
+        </div>
+      </>
     );
   };
 
@@ -782,114 +903,258 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showToolMenu]);
 
+  // Trowel durability bar floating/following mouse
+  const [trowelBarPos, setTrowelBarPos] = React.useState<{x: number, y: number} | null>(null);
+
+  React.useEffect(() => {
+    if (selectedTool === 'trowel' && !isMobile) {
+      const handleMouseMove = (e: MouseEvent) => {
+        setTrowelBarPos({ x: e.clientX, y: e.clientY });
+      };
+      window.addEventListener('mousemove', handleMouseMove);
+      return () => window.removeEventListener('mousemove', handleMouseMove);
+    } else {
+      setTrowelBarPos(null);
+    }
+  }, [selectedTool]);
+
+  // --- Fake shovel cursor for dig tool ---
+  const [fakeCursorPos, setFakeCursorPos] = React.useState<{x: number, y: number} | null>(null);
+
+  React.useEffect(() => {
+    if (selectedTool === 'dig') {
+      const move = (e: MouseEvent) => setFakeCursorPos({ x: e.clientX, y: e.clientY });
+      window.addEventListener('mousemove', move);
+      document.body.style.cursor = 'none';
+      return () => {
+        window.removeEventListener('mousemove', move);
+        document.body.style.cursor = '';
+        setFakeCursorPos(null);
+      };
+    } else {
+      document.body.style.cursor = '';
+      setFakeCursorPos(null);
+    }
+  }, [selectedTool]);
+
+  // Compute if any modal/menu is open
+  const menuOpen = showShop || showInventory || showHelp || showRenameDialog || showDevConsole;
+
   return (
     <div className={`app-container${darkMode ? ' dark-mode' : ''}`}>
       {/* Rain overlay (does not block clicks) */}
       {showRainOverlay && <RainOverlay />}
-      {/* Weather floating button (top right, always visible) */}
-      <button
-        onClick={() => setShowWeatherDialog(true)}
-        style={{
-          position: 'fixed',
-          top: 16,
-          right: 16,
-          zIndex: 2001,
-          padding: '0.7em 1.3em',
-          borderRadius: 18,
-          border: 'none',
-          background: weather === 'rain' || rainForecast.duration > 0 ? '#4fc3f7' : '#e3f2fd',
-          color: '#23293a',
-          fontWeight: 700,
-          fontSize: '1.15em',
-          boxShadow: weather === 'rain' || rainForecast.duration > 0 ? '0 0 16px #4fc3f7aa' : '0 2px 8px #bfa76f22',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          transition: 'background 0.3s, box-shadow 0.3s',
-          outline: weather === 'rain' || rainForecast.duration > 0 ? '2px solid #039be5' : undefined,
-          animation: (weather === 'rain' || rainForecast.duration > 0) ? 'weatherPulse 1.2s infinite alternate' : undefined
-        }}
-        title="Weather forecast"
-      >
-        <span role="img" aria-label="weather">{weather === 'rain' || rainForecast.duration > 0 ? '🌧️' : '🌦️'}</span> Weather
-      </button>
-      {showWeatherDialog && (
-        <WeatherDialog hasAnimatedIn={weatherDialogAnimatedIn} setHasAnimatedIn={setWeatherDialogAnimatedIn} />
-      )}
-      <style>{`
-        @keyframes weatherPulse {
-          0% { box-shadow: 0 0 16px #4fc3f7aa; }
-          100% { box-shadow: 0 0 32px #4fc3f7ee; }
-        }
-      `}</style>
       <h1 onClick={handleTitleTap}>{title}</h1>
-      <div className="status-bar">
-        <div style={{ fontWeight: 'bold', fontSize: '1.1em' }}>Next day in: {timer}s</div>
-        <div>Day: {day}</div>
-        <div>Money: ${player.money}</div>
-        <div>Potatoes in inventory: {player.potatoes}</div>
-        <div>Selected Plot: {selected ? `${selected.x+1},${selected.y+1}` : 'None'}</div>
-        <button onClick={() => setShowInventory(v => !v)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#ffb74d', color: '#222', cursor: 'pointer'}}>Inventory</button>
+      {/* Main status bar (money, potatoes, days, etc.) */}
+      <div className="status-bar" style={{
+        transition: 'filter 0.2s',
+        zIndex: 100,
+        position: 'relative',
+      }}>
+        <div style={{display:'inline-block',marginRight:18}}>
+          <b>💰</b> ${player.money}
+        </div>
+        <div style={{display:'inline-block',marginRight:18}}>
+          <b>🥔</b> {player.potatoes}
+        </div>
+        <div style={{display:'inline-block',marginRight:18}}>
+          <b>Day:</b> {day}
+        </div>
+        <div style={{display:'inline-block',marginRight:18, color:'#4a90e2', fontWeight:600}}>
+          Next day in: {timer}s
+        </div>
         <button
-          ref={toolsBtnRef}
-          onClick={handleShowToolMenu}
+          onClick={handleNextDay}
           style={{
             marginLeft: 8,
-            padding: '0.3rem 1rem',
+            padding: '0.3rem 1.1rem',
             borderRadius: 5,
             border: 'none',
-            background: '#b3e5fc',
+            background: '#ffd54f',
             color: '#222',
-            cursor: 'pointer',
             fontWeight: 700,
-            position: 'relative',
-            zIndex: 2100
+            cursor: player.money >= 5 ? 'pointer' : 'not-allowed',
+            opacity: player.money >= 5 ? 1 : 0.6,
+            transition: 'opacity 0.2s',
           }}
+          disabled={player.money < 5}
+          title="Advance to the next day for $5"
+        >
+          Next Day ($5)
+        </button>
+        <button onClick={()=>setShowInventory(true)} style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:'#ffd54f',color:'#222',cursor:'pointer',fontWeight:700}}>Inventory</button>
+        <button onClick={()=>setShowShop(true)} style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:'#8bc34a',color:'#222',cursor:'pointer',fontWeight:700}}>Shop</button>
+        <button onClick={saveGame} style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:'#ffd54f',color:'#222',cursor:'pointer',fontWeight:700}}>Save</button>
+        <button onClick={()=>setDarkMode(d=>!d)} style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:darkMode?'#23293a':'#fffbe7',color:darkMode?'#ffe082':'#23293a',cursor:'pointer',fontWeight:700}} title="Toggle light/dark mode">{darkMode ? '☀️ Light' : '🌙 Dark'}</button>
+        <button onClick={()=>setShowHelp(true)} style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:'#90caf9',color:'#222',cursor:'pointer',fontWeight:700}}>Help</button>
+        <button
+          ref={toolsBtnRef}
+          onClick={() => {
+            if (toolsBtnRef.current) {
+              const rect = toolsBtnRef.current.getBoundingClientRect();
+              setToolMenuPos({
+                top: rect.bottom + window.scrollY + 4,
+                left: rect.left + window.scrollX
+              });
+            }
+            setShowToolMenu(v => !v);
+          }}
+          style={{marginLeft:8,padding:'0.3rem 1rem',borderRadius:5,border:'none',background:'#b3e5fc',color:'#222',cursor:'pointer',fontWeight:700}}
+          type="button"
+          tabIndex={0}
         >
           🛠️ Tools
         </button>
-        {/* Tools dropdown menu, styled for light/dark mode and floats next to the button */}
-        {showToolMenu && toolMenuPos && (
-          <div
-            id="tools-dropdown-menu"
-            ref={toolsDropdownRef}
-            style={{
-              position: 'absolute',
-              top: toolMenuPos.top,
-              left: toolMenuPos.left,
-              background: darkMode ? '#23293a' : '#fff',
-              color: darkMode ? '#ffe082' : '#23293a',
-              border: darkMode ? '1.5px solid #4fc3f7' : '1.5px solid #b3e5fc',
-              borderRadius: 14,
-              boxShadow: darkMode ? '0 6px 32px #000a' : '0 6px 32px #4fc3f733',
-              minWidth: 210,
-              padding: '0.7em 0.2em 0.7em 0.2em',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0,
-              zIndex: 3001,
-              animation: `${showToolMenu ? 'dropdownFadeIn' : 'dropdownFadeOut'} 0.22s cubic-bezier(.4,1.6,.4,1)`,
-              transition: 'opacity 0.22s cubic-bezier(.4,1.6,.4,1), transform 0.22s cubic-bezier(.4,1.6,.4,1)',
-              opacity: showToolMenu ? 1 : 0,
-              transform: showToolMenu ? 'translateY(0)' : 'translateY(-10px)'
-            }}
-            tabIndex={-1}
-          >
-            <button onClick={()=>{setSelectedTool('dig'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='dig'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Dig</button>
-            <button onClick={()=>{setSelectedTool('sow'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='sow'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Sow</button>
-            <button onClick={()=>{setSelectedTool('water'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='water'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Water</button>
-            <button onClick={()=>{setSelectedTool('fertilize'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='fertilize'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Fertilize</button>
-            <button onClick={()=>{setSelectedTool('harvest'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='harvest'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Harvest</button>
-            <button onClick={()=>{setSelectedTool('trowel'); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:selectedTool==='trowel'?(darkMode?'#ffd54f22':'#ffd54f'):'transparent',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#ffe082':'#23293a',borderRadius:8}}>Trowel</button>
-            <button onClick={()=>{nextDay(); if (isMobile) setShowToolMenu(false);}} style={{padding:'0.7em 1.2em',border:'none',background:darkMode?'#aed58122':'#aed581',fontWeight:700,textAlign:'left',cursor:'pointer',color:darkMode?'#fffde4':'#23293a',borderRadius:8,marginTop:4}}>Next Day</button>
-          </div>
-        )}
-        <button onClick={() => setShowShop(v => !v)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#8bc34a', color: '#222', cursor: 'pointer'}}>Shop</button>
-        <button onClick={saveGame} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#ffd54f', color: '#222', cursor: 'pointer'}}>Save</button>
-        <button onClick={() => setDarkMode(d => !d)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: darkMode ? '#23293a' : '#fffbe7', color: darkMode ? '#ffe082' : '#23293a', cursor: 'pointer', fontWeight: 700}} title="Toggle light/dark mode">{darkMode ? '☀️ Light' : '🌙 Dark'}</button>
-        <button onClick={() => setShowHelp(true)} style={{marginLeft: 8, padding: '0.3rem 1rem', borderRadius: 5, border: 'none', background: '#90caf9', color: '#222', cursor: 'pointer', fontWeight: 700}}>Help</button>
       </div>
+
+      {/* Weather and Tools buttons in fixed top-right, always clickable */}
+      <div style={{
+  position: 'fixed',
+  top: 16,
+  right: 16,
+  zIndex: 3000,
+  display: 'flex',
+  gap: 8,
+}}>
+        <button
+          onClick={() => setShowWeatherDialog(true)} // Always open
+          style={{
+            padding: '0.7em 1.3em',
+            borderRadius: 18,
+            border: 'none',
+            background: weather === 'rain' || rainForecast.duration > 0 ? '#4fc3f7' : '#e3f2fd',
+            color: '#23293a',
+            fontWeight: 700,
+            fontSize: '1.15em',
+            boxShadow: weather === 'rain' || rainForecast.duration > 0 ? '0 0 16px #4fc3f7aa' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            zIndex: 3001,
+          }}
+          title="Weather forecast"
+          tabIndex={0}
+        >
+          <span role="img" aria-label="weather">{weather === 'rain' || rainForecast.duration > 0 ? '🌧️' : '🌤️'}</span> Weather
+        </button>
+      </div>
+      {/* Tools dropdown menu, ensure high z-index and pointerEvents */}
+      {showToolMenu && toolMenuPos && (
+        <div
+          id="tools-dropdown-menu"
+          ref={toolsDropdownRef}
+          style={{
+            position: 'absolute',
+            top: toolMenuPos.top,
+            left: toolMenuPos.left,
+            background: darkMode
+              ? 'linear-gradient(135deg, #23293a 60%, #4a90e2 100%)'
+              : 'linear-gradient(135deg, #fffbe7 60%, #ffd54f 100%)',
+            color: darkMode ? '#ffe082' : '#795548',
+            border: darkMode ? '2.5px solid #4fc3f7' : '2.5px solid #ffd54f',
+            borderRadius: 18,
+            boxShadow: darkMode
+              ? '0 8px 32px #4a90e288, 0 1px 4px #23293a44 inset'
+              : '0 8px 32px #bfa76f44, 0 1px 4px #ffd54f33 inset',
+            minWidth: 220,
+            padding: '1.1em 0.7em 1.1em 0.7em',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            zIndex: 4000,
+            pointerEvents: 'auto',
+            animation: `${showToolMenu ? 'dropdownFadeIn' : 'dropdownFadeOut'} 0.22s cubic-bezier(.4,1.6,.4,1)`,
+            transition: 'opacity 0.22s cubic-bezier(.4,1.6,.4,1), transform 0.22s cubic-bezier(.4,1.6,.4,1)',
+            opacity: showToolMenu ? 1 : 0,
+            transform: showToolMenu ? 'translateY(0)' : 'translateY(-10px)',
+            fontFamily: 'inherit',
+            fontWeight: 600,
+            letterSpacing: 0.5,
+          }}
+          tabIndex={-1}
+        >
+          <div style={{fontWeight:700, fontSize:'1.13em', marginBottom:8, letterSpacing:1, color:darkMode?'#ffe082':'#bfa76f', textShadow:darkMode?'0 1px 0 #23293a':'0 1px 0 #fffbe7'}}>Select Tool</div>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('dig'); setShowToolMenu(false); }}>🪓 Dig</button>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('sow'); setShowToolMenu(false); }}>🌱 Sow</button>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('water'); setShowToolMenu(false); }}>💧 Water</button>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('fertilize'); setShowToolMenu(false); }}>🌾 Fertilize</button>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('harvest'); setShowToolMenu(false); }}>🥔 Harvest</button>
+          <button style={{
+            background: darkMode ? 'linear-gradient(90deg, #4a90e2 60%, #ffe082 100%)' : 'linear-gradient(90deg, #ffd54f 60%, #fffbe7 100%)',
+            color: darkMode ? '#23293a' : '#795548',
+            border: 'none',
+            borderRadius: 10,
+            margin: '2px 0',
+            fontWeight: 700,
+            fontSize: '1.08em',
+            padding: '0.7em 1.2em',
+            boxShadow: darkMode ? '0 2px 8px #4a90e244' : '0 2px 8px #bfa76f22',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+          }} onClick={() => { setSelectedTool('trowel'); setShowToolMenu(false); }}>🧑‍🌾 Trowel</button>
+        </div>
+      )}
       {/* Event log now appears between tools and field */}
       <div className={`event-log${eventLog ? ' visible' : ''}${eventLog ? ' ' + eventLog.type : ''}`}>{eventLog?.msg}</div>
       {/* Developer Console (hidden, appears on aquacheese) */}
@@ -915,18 +1180,42 @@ function App() {
             <h2>How to Play</h2>
             <div style={{fontSize: '1.08em', lineHeight: 1.7}}>
               <b>Welcome to Potato Farming!</b><br/><br/>
-              <b>Goal:</b> Grow, harvest, and sell potatoes to expand your farm and become a potato tycoon.<br/><br/>
-              <b>Game Mechanics:</b><br/>
-              <ul style={{marginLeft: 18}}>
-                <li><b>Tools:</b> Click the <b>🛠️ Tools</b> button in the status bar to open the tool menu. Select a tool, then click a plot to use it. Tools include Dig, Sow Seeds, Water, Fertilize, Harvest, Trowel, and Next Day.</li>
-                <li><b>Dig:</b> Use the shovel to dig empty plots before sowing seeds.</li>
-                <li><b>Sow Seeds:</b> Plant potato seeds in dug plots. You need seeds (buy in shop).</li>
-                <li><b>Water:</b> Water sown potatoes daily to keep them alive. If unwatered for 3 days, they die. <b>Irrigation upgrade</b> will water all plots automatically each day.</li>
-                <li><b>Fertilize:</b> Fertilizer (buy in shop) makes potatoes grow faster. <b>Fertilizer System upgrade</b> makes all crops grow faster automatically.</li>
-                <li><b>Harvest:</b> When a potato is mature (🥔🥔), harvest it to collect potatoes. <b>Tractor upgrade</b> will harvest all mature potatoes for you at the start of each day.</li>
-                <li><b>Trowel:</b> Use the trowel (buy in shop) to remove dead plants (💀). Trowels have limited durability.</li>
-                <li><b>Next Day:</b> Advances the day. Plants grow, water decreases, and unwatered plants may die.</li>
-                <li><b>Shop:</b> Buy seeds, fertilizer, field expansions, rename your farm, trowels, and <b>upgrades</b> (Irrigation, Fertilizer System, Tractor).</li>
+              <b>Field Plots:</b><br/>
+              <div style={{display:'flex',gap:12,alignItems:'center',margin:'8px 0'}}>
+                <img src="/POTATO/Dirt_Dry.png" alt="Dry" style={{width:48,height:48,borderRadius:8}} title="Dry Plot"/>
+                <img src="/POTATO/Dirt_Wet.png" alt="Wet" style={{width:48,height:48,borderRadius:8}} title="Wet Plot"/>
+                <img src="/POTATO/Dirt_Dry_GS1.png" alt="Sprout" style={{width:48,height:48,borderRadius:8}} title="Sprout"/>
+                <img src="/POTATO/Dirt_DrWet_Potato.png" alt="Mature" style={{width:48,height:48,borderRadius:8}} title="Mature Potato"/>
+                <img src="/POTATO/Dirt_Dry_ded.png" alt="Dead" style={{width:48,height:48,borderRadius:8}} title="Dead Plant"/>
+              </div>
+              <ul style={{marginLeft:18}}>
+                <li><b>Dig</b> <img src="/POTATO/Shovel.png" alt="Shovel" style={{width:22,verticalAlign:'middle'}}/>: Prepare a plot for planting.</li>
+                <li><b>Sow</b>: Plant potato seeds in a dug plot.</li>
+                <li><b>Water</b>: Water sown plots to help potatoes grow.</li>
+                <li><b>Fertilize</b>: Use fertilizer to speed up growth.</li>
+                <li><b>Harvest</b>: Collect mature potatoes.</li>
+                <li><b>Trowel</b> <span role="img" aria-label="trowel">🧑‍🌾</span>: Remove dead plants (requires trowel item).</li>
+              </ul>
+              <b>Weather & Rain:</b><br/>
+              <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 0'}}>
+                <img src="/POTATO/potato rain.png" alt="Rain" style={{width:40,height:40}}/>
+                <span style={{fontSize:'1.2em'}}>
+                  <span role="img" aria-label="cloud">☁️</span> <span role="img" aria-label="rain">🌧️</span>
+                </span>
+              </div>
+              <ul style={{marginLeft:18}}>
+                <li><b>Rain</b> brings animated clouds and a stormy overlay.</li>
+                <li>When rain starts, <b>all dry dug plots are instantly watered</b>!</li>
+                <li>Rain continues to water all dug plots each day it lasts.</li>
+              </ul>
+              <b>Upgrades:</b>
+              <ul style={{marginLeft:18}}>
+                <li><b>Irrigation:</b> Waters all sown, non-dead plots automatically each day.</li>
+                <li><b>Fertilizer System:</b> All crops grow faster.</li>
+                <li><b>Tractor:</b> Auto-harvests mature potatoes.</li>
+              </ul>
+              <b>Other Features:</b>
+              <ul style={{marginLeft:18}}>
                 <li><b>Inventory:</b> View your potatoes, seeds, fertilizer, trowel durability, and owned upgrades.</li>
                 <li><b>Selling:</b> Sell all harvested potatoes from the inventory for money.</li>
                 <li><b>Expanding:</b> Buy plot extensions to increase your field size (up to 12x12).</li>
@@ -934,22 +1223,7 @@ function App() {
                 <li><b>Light/Dark Mode:</b> Toggle the color theme for comfort.</li>
                 <li><b>Developer Console:</b> (Secret) Type "aquacheese" (desktop) or tap the title 7 times (mobile) for cheats.</li>
               </ul>
-              <b>Upgrades:</b>
-              <ul style={{marginLeft: 18}}>
-                <li><b>Irrigation:</b> Waters all sown, non-dead plots automatically each day.</li>
-                <li><b>Fertilizer System:</b> All crops grow faster (growth time halved).</li>
-                <li><b>Tractor:</b> Auto-harvests all mature potatoes at the start of each day.</li>
-              </ul>
-              <b>Tips:</b>
-              <ul style={{marginLeft: 18}}>
-                <li>Keep potatoes watered every day! (Or buy irrigation.)</li>
-                <li>Fertilizer and the Fertilizer System make crops grow faster.</li>
-                <li>Dead plants must be removed with a trowel before reusing the plot.</li>
-                <li>Expand your field to grow more potatoes and earn more money.</li>
-                <li>Use the shop to buy more seeds, fertilizer, tools, and upgrades as you earn money.</li>
-                <li>Keyboard shortcuts: Ctrl+S to save, I for inventory, O for shop, N for next day, 1-5/T for tools.</li>
-              </ul>
-              <b>Have fun farming!</b>
+              <div style={{marginTop:18,fontSize:'0.98em',color:'#888'}}>Tip: Use keyboard shortcuts (1-5, T, I, O, N) for quick actions!</div>
             </div>
           </div>
         </div>
@@ -959,30 +1233,37 @@ function App() {
           <div className="field-row" key={y}>
             {Array(fieldSize).fill(null).map((_, x) => {
               const plot = field.grid[y] && field.grid[y][x] ? field.grid[y][x] : { isDug: false, isSown: false, water: 0, fertilizer: 0, stage: 'empty' as const, daysSinceWater: 0, days: 0 };
+              let plotImage = '/POTATO/Dirt_Dry.png';
+              if (plot.stage === 'sprout') {
+                plotImage = plot.water > 0 ? '/POTATO/Dirt_Wet_GS1.png' : '/POTATO/Dirt_Dry_GS1.png';
+              } else if (plot.stage === 'growing') {
+                plotImage = plot.water > 0 ? '/POTATO/Dirt_Wet_GS2.png' : '/POTATO/Dirt_Dry_GS2.png';
+              } else if (plot.stage === 'mature') {
+                plotImage = plot.water > 0 ? '/POTATO/Dirt_DrWet_Potato.png' : '/POTATO/Dirt_Dry_Potato.png';
+              } else if (plot.stage === 'dead') {
+                plotImage = plot.water > 0 ? '/POTATO/Dirt_Wet_ded.png' : '/POTATO/Dirt_Dry_ded.png';
+              } else if (plot.water > 0) {
+                plotImage = plot.isDug ? '/POTATO/Dirt_Wet_Hole.png' : '/POTATO/Dirt_Wet.png';
+              } else {
+                plotImage = plot.isDug ? '/POTATO/Dirt_Dry_Hole.png' : '/POTATO/Dirt_Dry.png';
+              }
+
               return (
                 <div
                   key={x}
-                  className={`plot${selected && selected.x === x && selected.y === y ? ' selected' : ''} ${plot.isDug ? 'dug' : ''} ${plot.isSown ? 'sown' : ''} stage-${plot.stage}`}
+                  className={`plot${selected && selected.x === x && selected.y === y ? ' selected' : ''}`}
                   onClick={() => handlePlotClick(x, y)}
-                  style={{ position: 'relative' }}
+                  style={{
+                    position: 'relative',
+                    backgroundImage: `url(${plotImage})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    width: '64px',
+                    height: '64px',
+                    // No dark mode filter: use the same images for both themes
+                  }}
                 >
-                  {plot.stage === 'empty' && ''}
-                  {plot.stage === 'sprout' && '🌱'}
-                  {plot.stage === 'growing' && '🥔'}
-                  {plot.stage === 'mature' && '🥔🥔'}
-                  {plot.stage === 'dead' && '💀'}
-                  {/* Show water drops if watered, or warning if dry */}
-                  {plot.isDug && plot.stage !== 'empty' && plot.stage !== 'dead' && (
-                    <span style={{
-                      position: 'absolute',
-                      left: 2,
-                      bottom: 2,
-                      fontSize: '1.1em',
-                      opacity: 0.85
-                    }}>
-                      {plot.water > 0 ? '💧'.repeat(Math.min(plot.water, 3)) : <span style={{color:'#c62828'}}>!</span>}
-                    </span>
-                  )}
+                  {/* Additional plot content */}
                 </div>
               );
             })}
@@ -1033,15 +1314,6 @@ function App() {
             <div>Potatoes: {player.potatoes}</div>
             <div>Seeds: {player.seeds}</div>
             <div>Fertilizer: {player.fertilizer}</div>
-            {player.trowel && player.trowel.durability > 0 && (
-              <div style={{marginTop: 10, marginBottom: 10}}>
-                <div style={{fontWeight: 600, color: '#795548', marginBottom: 4}}>Trowel</div>
-                <div className="trowel-bar">
-                  <div className="trowel-bar-inner" style={{width: `${(player.trowel.durability/TROWEL_MAX_DURABILITY)*100}%`, background: player.trowel.durability > 3 ? 'linear-gradient(90deg,#4caf50 60%,#ffeb3b 100%)' : 'linear-gradient(90deg,#e57373 60%,#ffeb3b 100%)'}}></div>
-                  <span className="trowel-bar-label">{player.trowel.durability} / {TROWEL_MAX_DURABILITY}</span>
-                </div>
-              </div>
-            )}
             <div style={{marginTop: 12, fontWeight: 600, color: '#795548'}}>Upgrades Owned:</div>
             <ul style={{margin: 0, padding: '0 0 0 18px', color: '#333', fontSize: '1em'}}>
               {upgrades.irrigation && <li>Irrigation (auto-waters daily)</li>}
@@ -1049,7 +1321,9 @@ function App() {
               {upgrades.tractor && <li>Tractor (auto-harvests mature potatoes)</li>}
               {!upgrades.irrigation && !upgrades.fertilizer && !upgrades.tractor && <li>None</li>}
             </ul>
-            <button onClick={sellPotatoes} style={{ marginTop: 8, padding: '0.5rem 1.2rem', fontSize: '1rem', borderRadius: 5, border: 'none', background: '#ffb74d', color: '#222', cursor: 'pointer' }}>Sell All Potatoes (${Number(player.potatoes) * 15})</button>
+            <button onClick={sellPotatoes} style={{ marginTop: 8, padding: '0.5rem 1.2rem', fontSize: '1rem', borderRadius: 5, border: 'none', background: '#8bc34a', color: '#222', cursor: 'pointer', width: '100%' }}>
+              Sell All Potatoes
+            </button>
           </div>
         </div>
       )}
@@ -1066,6 +1340,68 @@ function App() {
         RESET PROGRESS
       </button>
       {showDebug && debugInfo}
+
+      {/* Trowel durability bar (desktop: follows mouse, mobile: under status bar) */}
+      {selectedTool === 'trowel' && player.trowel && player.trowel.durability > 0 && (
+        !isMobile && trowelBarPos ? (
+          <div
+            className="trowel-bar trowel-bar-float"
+            style={{
+              position: 'fixed',
+              left: trowelBarPos.x + 16,
+              top: trowelBarPos.y - 32,
+              zIndex: 3002,
+              pointerEvents: 'none',
+              minWidth: 120,
+              maxWidth: 220,
+              width: 160,
+            }}
+          >
+            <div className="trowel-bar-inner" style={{ width: `${(player.trowel.durability / TROWEL_MAX_DURABILITY) * 100}%` }} />
+            <span className="trowel-bar-label">{player.trowel.durability} / {TROWEL_MAX_DURABILITY}</span>
+          </div>
+        ) : null
+      )}
+      {selectedTool === 'trowel' && player.trowel && player.trowel.durability > 0 && isMobile && (
+        <div
+          className="trowel-bar trowel-bar-mobile"
+          style={{
+            position: 'relative',
+            margin: '0.5em auto 0.5em auto',
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            width: '90vw',
+            maxWidth: 320,
+          }}
+        >
+          <div className="trowel-bar-inner" style={{ width: `${(player.trowel.durability / TROWEL_MAX_DURABILITY) * 100}%` }} />
+          <span className="trowel-bar-label">{player.trowel.durability} / {TROWEL_MAX_DURABILITY}</span>
+        </div>
+      )}
+
+      {/* Render fake shovel cursor if dig tool is selected (desktop only) */}
+      {selectedTool === 'dig' && fakeCursorPos && !isMobile && (
+        <img
+          src="/POTATO/Shovel.png"
+          alt="shovel cursor"
+          style={{
+            position: 'fixed',
+            left: fakeCursorPos.x - 8, // adjust for hotspot
+            top: fakeCursorPos.y - 32, // adjust for hotspot
+            width: 64,
+            height: 64,
+            pointerEvents: 'none',
+            zIndex: 9999,
+            userSelect: 'none',
+            filter: 'drop-shadow(0 2px 8px #0008)'
+          }}
+          draggable={false}
+        />
+      )}
+      {showWeatherDialog && (
+        <WeatherDialog hasAnimatedIn={weatherDialogAnimatedIn} setHasAnimatedIn={setWeatherDialogAnimatedIn} />
+      )}
     </div>
   );
 }

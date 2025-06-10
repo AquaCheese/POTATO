@@ -1,0 +1,25 @@
+# Ignore node_modules
+node_modules/
+
+# Ignore build output
+dist/
+
+# Ignore Vite cache
+.vite/
+
+# Ignore log files
+*.log
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore cache folders
+.cache/
+
+# Ignore environment files
+.env
+.env.*
+
+# Ignore IDE settings
+.vscode/
