@@ -14,12 +14,12 @@ To get started with the Potato Farming Game, follow these steps:
 
 1. **Clone the repository**:
    ```
-   git clone https://github.com/yourusername/potato-farming-game.git
+   git clone https://github.com/AquaCheese/POTATO.git
    ```
 
 2. **Navigate to the project directory**:
    ```
-   cd potato-farming-game
+   cd POTATO
    ```
 
 3. **Install dependencies**:
@@ -47,5 +47,6 @@ If you would like to contribute to the Potato Farming Game, feel free to submit 
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for more details.
+
 
 Enjoy farming!
