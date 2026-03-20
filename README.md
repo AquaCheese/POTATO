@@ -29,8 +29,33 @@ To get started with the Potato Farming Game, follow these steps:
 
 4. **Run the game**:
    ```
-   npm start
+    npm run dev
    ```
+
+## Build Targets
+
+This project supports two production targets:
+
+- **Web build** (default hosting):
+   ```
+   npm run build:web
+   ```
+- **GitHub Pages build** (repo subpath hosting):
+   ```
+   npm run build:pages
+   ```
+
+Both builds keep the game installable as a PWA in supported browsers.
+
+## Deploy To GitHub Pages
+
+Use:
+
+```
+npm run deploy
+```
+
+The deploy flow automatically builds with the GitHub Pages base path before publishing.
 
 ## Gameplay
 
